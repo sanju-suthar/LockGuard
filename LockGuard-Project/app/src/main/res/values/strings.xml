@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">LockGuard</string>
-    <string name="service_name">LockGuard Power Blocker</string>
-    <string name="accessibility_service_description">Blocks the Power Off / Restart menu when your Realme device is locked and captures an intruder photo if someone tries to switch off your phone.</string>
-</resources>
