@@ -21,14 +21,15 @@ Grab the ready-to-install APK built directly via GitHub Actions:
 
 ## 🚀 Key Features & Technical Architecture
 
-* **🚫 Instant Power Menu Blocker (`AccessibilityService` + `KeyguardManager`):** 
-  Monitors device lock state in real-time. If the device is locked and the Power Off / Restart dialog is triggered, LockGuard dismisses it within milliseconds.
+* **🚫 Smart Power Menu Blocker (Zero False Triggers):** 
+  Uses `AccessibilityService` (`TYPE_WINDOW_STATE_CHANGED` & `onKeyEvent`) to strictly detect genuine Android System Shutdown/GlobalActions dialogs (`GlobalActions`, `OplusGlobalActions`, `ColorGlobalActions`). Completely ignores lockscreen SMS/WhatsApp notifications (`notification_stack_scroller`) to guarantee zero false alarms.
 * **📸 Silent Intruder Selfie (`CameraX` + `TYPE_ACCESSIBILITY_OVERLAY`):** 
   Uses a 1x1 pixel invisible overlay on the lock screen to capture a front-camera photo of the intruder without any camera preview or shutter sound.
-* **📧 Automated Email Alerts (`JavaMail SMTP`):** 
-  Immediately sends the intruder's photo, exact time, and current battery percentage to your configured email address in the background (requires active mobile data/Wi-Fi).
+* **📧 Instant Email Alerts + Offline Auto-Sync (`JavaMail SMTP` + `NetworkCallback`):** 
+  Immediately emails the intruder's photo, exact timestamp, and battery level. If the device is offline, photos are queued locally (capped at the latest 5 photos / ~200 KB max via `enforceCacheLimit()`) and automatically emailed & deleted from cache the moment Wi-Fi or Mobile Data reconnects!
 * **👻 Stealth 24/7 Background Operation (`BOOT_COMPLETED` / Direct Boot):** 
-  Runs via Android's native Accessibility Service—meaning no annoying persistent notification in the status bar, and automatic startup on boot even before the first unlock.
+  Runs silently with zero persistent notifications and auto-starts on reboot even before the device is unlocked.
+
 
 ---
 
