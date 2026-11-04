@@ -89,6 +89,26 @@
                 android:textSize="15sp"
                 android:checked="true"
                 android:paddingVertical="6dp" />
+
+            <Switch
+                android:id="@+id/switchLocationShare"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Send Exact GPS Location in Email"
+                android:textColor="#E2E8F0"
+                android:textSize="15sp"
+                android:checked="true"
+                android:paddingVertical="6dp" />
+
+            <Switch
+                android:id="@+id/switchAutoWifi"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Auto-Enable Wi-Fi &amp; Connect if Offline"
+                android:textColor="#E2E8F0"
+                android:textSize="15sp"
+                android:checked="true"
+                android:paddingVertical="6dp" />
         </LinearLayout>
 
         <!-- Step 1: Required Permissions -->
@@ -119,6 +139,15 @@
                 android:layout_marginBottom="8dp" />
 
             <Button
+                android:id="@+id/btnLocationPerm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Grant Exact Location &amp; Wi-Fi Permission"
+                android:backgroundTint="#334155"
+                android:textColor="#F8FAFC"
+                android:layout_marginBottom="8dp" />
+
+            <Button
                 android:id="@+id/btnBatteryOpt"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -138,7 +167,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tip for Realme UI 2.0: In App Info -> Battery Usage, enable 'Allow background activity' and 'Allow auto-launch' so Realme never stops the app."
+                android:text="Tip for Realme UI 2.0: In App Info -> Permissions -> Location, select 'Allow all the time' so GPS &amp; Wi-Fi scan work on Lock Screen."
                 android:textColor="#94A3B8"
                 android:textSize="12sp"
                 android:layout_marginTop="8dp" />
@@ -216,7 +245,7 @@
                 android:id="@+id/btnTestEmail"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Test Front Camera &amp; Send Test Email"
+                android:text="Test Camera, GPS Location &amp; Send Email"
                 android:backgroundTint="#475569"
                 android:textColor="#FFFFFF" />
 

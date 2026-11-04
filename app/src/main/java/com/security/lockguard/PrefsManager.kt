@@ -9,6 +9,8 @@ object PrefsManager {
 
     private const val KEY_POWER_BLOCK_ENABLED = "power_block_enabled"
     private const val KEY_PHOTO_ALERT_ENABLED = "photo_alert_enabled"
+    private const val KEY_LOCATION_SHARE_ENABLED = "location_share_enabled"
+    private const val KEY_AUTO_WIFI_ENABLED = "auto_wifi_enabled"
     private const val KEY_SENDER_EMAIL = "sender_email"
     private const val KEY_APP_PASSWORD = "app_password"
     private const val KEY_RECEIVER_EMAIL = "receiver_email"
@@ -34,6 +36,20 @@ object PrefsManager {
 
     fun setPhotoAlertEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_PHOTO_ALERT_ENABLED, enabled).apply()
+    }
+
+    fun isLocationShareEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_LOCATION_SHARE_ENABLED, true)
+
+    fun setLocationShareEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_LOCATION_SHARE_ENABLED, enabled).apply()
+    }
+
+    fun isAutoWifiEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_AUTO_WIFI_ENABLED, true)
+
+    fun setAutoWifiEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_AUTO_WIFI_ENABLED, enabled).apply()
     }
 
     fun getSenderEmail(context: Context): String =

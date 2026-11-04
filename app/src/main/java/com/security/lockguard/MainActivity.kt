@@ -26,7 +26,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvServiceStatus: TextView
     private lateinit var switchPowerBlock: Switch
     private lateinit var switchPhotoAlert: Switch
+    private lateinit var switchLocationShare: Switch
+    private lateinit var switchAutoWifi: Switch
     private lateinit var btnCameraPerm: Button
+    private lateinit var btnLocationPerm: Button
     private lateinit var btnBatteryOpt: Button
     private lateinit var btnAccessibility: Button
     private lateinit var etSenderEmail: EditText
@@ -43,7 +46,10 @@ class MainActivity : AppCompatActivity() {
         tvServiceStatus = findViewById(R.id.tvServiceStatus)
         switchPowerBlock = findViewById(R.id.switchPowerBlock)
         switchPhotoAlert = findViewById(R.id.switchPhotoAlert)
+        switchLocationShare = findViewById(R.id.switchLocationShare)
+        switchAutoWifi = findViewById(R.id.switchAutoWifi)
         btnCameraPerm = findViewById(R.id.btnCameraPerm)
+        btnLocationPerm = findViewById(R.id.btnLocationPerm)
         btnBatteryOpt = findViewById(R.id.btnBatteryOpt)
         btnAccessibility = findViewById(R.id.btnAccessibility)
         etSenderEmail = findViewById(R.id.etSenderEmail)
@@ -56,6 +62,8 @@ class MainActivity : AppCompatActivity() {
         // Load saved preferences
         switchPowerBlock.isChecked = PrefsManager.isPowerBlockEnabled(this)
         switchPhotoAlert.isChecked = PrefsManager.isPhotoAlertEnabled(this)
+        switchLocationShare.isChecked = PrefsManager.isLocationShareEnabled(this)
+        switchAutoWifi.isChecked = PrefsManager.isAutoWifiEnabled(this)
         etSenderEmail.setText(PrefsManager.getSenderEmail(this))
         etAppPassword.setText(PrefsManager.getAppPassword(this))
         etReceiverEmail.setText(PrefsManager.getReceiverEmail(this))
@@ -68,6 +76,14 @@ class MainActivity : AppCompatActivity() {
             PrefsManager.setPhotoAlertEnabled(this, isChecked)
         }
 
+        switchLocationShare.setOnCheckedChangeListener { _, isChecked ->
+            PrefsManager.setLocationShareEnabled(this, isChecked)
+        }
+
+        switchAutoWifi.setOnCheckedChangeListener { _, isChecked ->
+            PrefsManager.setAutoWifiEnabled(this, isChecked)
+        }
+
         btnCameraPerm.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED
@@ -76,6 +92,17 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, "Camera permission is already granted!", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        btnLocationPerm.setOnClickListener {
+            val perms = mutableListOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                perms.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
+            ActivityCompat.requestPermissions(this, perms.toTypedArray(), 102)
         }
 
         btnBatteryOpt.setOnClickListener {
@@ -108,7 +135,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             tvTestResult.setTextColor(Color.parseColor("#FCD34D"))
-            tvTestResult.text = "Capturing front camera photo & sending test email..."
+            tvTestResult.text = "Capturing photo, getting GPS location & sending email..."
             btnTestEmail.isEnabled = false
 
             CameraCaptureHelper.captureFrontPhoto(this) { photoFile ->
@@ -150,6 +177,14 @@ class MainActivity : AppCompatActivity() {
             "Camera Permission: GRANTED ✓"
         } else {
             "Grant Front Camera Permission"
+        }
+
+        val locGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        btnLocationPerm.text = if (locGranted) {
+            "Location & Wi-Fi Permission: GRANTED ✓"
+        } else {
+            "Grant Exact Location & Wi-Fi Permission"
         }
 
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
