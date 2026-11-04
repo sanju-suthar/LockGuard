@@ -18,9 +18,9 @@ android {
     signingConfigs {
         release {
             storeFile file("release-key.jks")
-            storePassword "LockGuard@2026"
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
             keyAlias "lockguard_key"
-            keyPassword "LockGuard@2026"
+            keyPassword System.getenv("KEYSTORE_PASSWORD") ?: ""
             v1SigningEnabled true
             v2SigningEnabled true
         }
