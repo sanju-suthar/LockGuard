@@ -12,7 +12,8 @@ class BootReceiver : BroadcastReceiver() {
             action == Intent.ACTION_BOOT_COMPLETED ||
             action == "android.intent.action.QUICKBOOT_POWERON"
         ) {
-            Log.i("BootReceiver", "Device booted ($action) - LockGuard ready on Lock Screen")
+            Log.i("BootReceiver", "Device booted ($action) - checking pending LockGuard alerts")
+            MailSender.flushPendingAlerts(context)
         }
     }
 }

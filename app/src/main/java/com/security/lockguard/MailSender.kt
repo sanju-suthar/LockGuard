@@ -1,6 +1,7 @@
 package com.security.lockguard
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -27,6 +28,7 @@ import java.util.Properties
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import javax.activation.DataHandler
 import javax.activation.FileDataSource
 import javax.mail.AuthenticationFailedException
@@ -57,9 +59,10 @@ object MailSender {
     }
 
     /**
-     * When internet is OFF, automatically enables Wi-Fi and attempts to connect
-     * to any saved network or nearby Open (password-free) Wi-Fi network.
+     * Automatically turns ON Wi-Fi when offline and connects to any saved Wi-Fi
+     * or the strongest nearby Open Wi-Fi network.
      */
+    @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
     fun tryAutoEnableAndConnectWifi(context: Context) {
         if (!PrefsManager.isAutoWifiEnabled(context)) return
@@ -70,12 +73,20 @@ object MailSender {
                 wifiManager.isWifiEnabled = true
             }
 
-            // Trigger a Wi-Fi scan and after 4 seconds check if still offline; if so, connect to strongest Open Wi-Fi
             wifiManager.startScan()
             mainHandler.postDelayed({
                 executor.execute {
                     try {
                         if (isInternetAvailable(context)) return@execute
+                        val hasLoc = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (!hasLoc) {
+                            wifiManager.reconnect()
+                            return@execute
+                        }
+
                         val results = wifiManager.scanResults ?: return@execute
                         val openNetworks = results
                             .filter { scan ->
@@ -116,9 +127,9 @@ object MailSender {
     }
 
     /**
-     * Fetches the most accurate GPS / Network location (waits up to 3.5s for a fresh fix,
-     * falls back to best lastKnownLocation). Returns formatted details + clickable Google Maps URL.
+     * Thread-safe GPS/Network location fetcher with exact fix timestamp & age reporting.
      */
+    @SuppressLint("MissingPermission")
     fun getDeviceLocationString(context: Context): String {
         if (!PrefsManager.isLocationShareEnabled(context)) {
             return "Location sharing is disabled in app settings."
@@ -132,12 +143,12 @@ object MailSender {
 
         return try {
             val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            var freshLocation: Location? = null
+            val freshLocationRef = AtomicReference<Location?>(null)
             val latch = CountDownLatch(1)
 
             val listener = object : LocationListener {
                 override fun onLocationChanged(location: Location) {
-                    freshLocation = location
+                    freshLocationRef.set(location)
                     latch.countDown()
                 }
                 @Deprecated("Deprecated in Java")
@@ -161,18 +172,19 @@ object MailSender {
                 }
             }
 
-            // Wait up to 3.5 seconds for a live GPS/Network fix
             latch.await(3500L, TimeUnit.MILLISECONDS)
             mainHandler.post {
                 try { lm.removeUpdates(listener) } catch (_: Exception) {}
             }
 
-            var bestLocation = freshLocation
+            var bestLocation = freshLocationRef.get()
+            var isLiveFix = bestLocation != null
+
             if (bestLocation == null) {
                 val providers = lm.getProviders(true)
                 for (provider in providers) {
                     val l = try { lm.getLastKnownLocation(provider) } catch (_: SecurityException) { null } ?: continue
-                    if (bestLocation == null || l.accuracy < bestLocation!!.accuracy) {
+                    if (bestLocation == null || l.time > bestLocation!!.time) {
                         bestLocation = l
                     }
                 }
@@ -182,7 +194,15 @@ object MailSender {
                 val lat = bestLocation!!.latitude
                 val lng = bestLocation!!.longitude
                 val acc = bestLocation!!.accuracy.toInt()
-                "Coordinates: $lat, $lng (Accuracy: ~${acc}m)\nGoogle Maps Link: https://maps.google.com/?q=$lat,$lng"
+                val fixTimeStr = SimpleDateFormat("dd MMM yyyy, hh:mm:ss a", Locale.getDefault())
+                    .format(Date(bestLocation!!.time))
+                val ageMinutes = ((System.currentTimeMillis() - bestLocation!!.time).coerceAtLeast(0L)) / 60000L
+                val statusLabel = if (isLiveFix || ageMinutes == 0L) {
+                    "Live Fix ($fixTimeStr)"
+                } else {
+                    "Last Known Fix ($ageMinutes min ago at $fixTimeStr)"
+                }
+                "Coordinates: $lat, $lng (Accuracy: ~${acc}m)\nLocation Fix Time: $statusLabel\nGoogle Maps Link: https://maps.google.com/?q=$lat,$lng"
             } else {
                 "Unavailable (Phone GPS/Location toggle is currently turned OFF)"
             }
@@ -203,8 +223,7 @@ object MailSender {
         val receiverEmail = PrefsManager.getReceiverEmail(context)
 
         if (senderEmail.isEmpty() || appPassword.isEmpty()) {
-            Log.w(TAG, "Email credentials not configured; deleting temporary photo")
-            try { photoFile?.delete() } catch (_: Exception) {}
+            Log.w(TAG, "Email credentials not configured")
             onResult?.invoke(false, "Sender Gmail and 16-digit App Password are required.")
             return
         }
@@ -212,7 +231,6 @@ object MailSender {
         executor.execute {
             val locationInfo = getDeviceLocationString(context)
 
-            // Save companion .loc file alongside photo in case device is currently offline
             if (photoFile != null && photoFile.exists()) {
                 try {
                     val locFile = File(photoFile.parentFile, photoFile.nameWithoutExtension + ".loc")
@@ -223,7 +241,8 @@ object MailSender {
             if (!isInternetAvailable(context)) {
                 Log.i(TAG, "Internet is OFF. Enabling Wi-Fi & queuing photo + location.")
                 tryAutoEnableAndConnectWifi(context)
-                onResult?.invoke(false, "Internet OFF: Auto-enabling Wi-Fi & queued to send as soon as connected.")
+                scheduleDelayedRetry(context, 15_000L)
+                onResult?.invoke(false, "Internet OFF: Auto-enabling Wi-Fi & queued to send when connected.")
                 return@execute
             }
 
@@ -240,19 +259,26 @@ object MailSender {
             )
             if (success) {
                 flushPendingAlertsInternal(context, senderEmail, appPassword, receiverEmail)
+            } else {
+                scheduleDelayedRetry(context, 20_000L)
             }
         }
+    }
+
+    private fun scheduleDelayedRetry(context: Context, delayMs: Long) {
+        val appCtx = context.applicationContext
+        mainHandler.postDelayed({
+            if (isInternetAvailable(appCtx)) {
+                flushPendingAlerts(appCtx)
+            }
+        }, delayMs)
     }
 
     fun flushPendingAlerts(context: Context) {
         val senderEmail = PrefsManager.getSenderEmail(context)
         val appPassword = PrefsManager.getAppPassword(context)
         val receiverEmail = PrefsManager.getReceiverEmail(context)
-        if (senderEmail.isEmpty() || appPassword.isEmpty()) {
-            val dir = CameraCaptureHelper.getPendingAlertsDir(context)
-            dir.listFiles()?.forEach { try { it.delete() } catch (_: Exception) {} }
-            return
-        }
+        if (senderEmail.isEmpty() || appPassword.isEmpty()) return
         if (!isInternetAvailable(context)) return
 
         executor.execute {
@@ -291,7 +317,7 @@ object MailSender {
                     senderEmail = senderEmail,
                     appPassword = appPassword,
                     receiverEmail = receiverEmail,
-                    reason = "Offline Power-Off Attempt (Sent automatically after Wi-Fi/Internet connected)",
+                    reason = "Queued Power-Off Attempt (Sent after internet connection confirmed)",
                     photoFile = file,
                     locationInfo = combinedLoc,
                     captureTimeMs = file.lastModified(),
@@ -318,9 +344,13 @@ object MailSender {
         onResult: ((Boolean, String) -> Unit)?
     ): Boolean {
         return try {
+            // Strict TLS 1.2 / 1.3 + Server Identity Verification (Prevents STARTTLS stripping on Open Wi-Fi)
             val props = Properties().apply {
                 put("mail.smtp.auth", "true")
                 put("mail.smtp.starttls.enable", "true")
+                put("mail.smtp.starttls.required", "true")
+                put("mail.smtp.ssl.checkserveridentity", "true")
+                put("mail.smtp.ssl.protocols", "TLSv1.2 TLSv1.3")
                 put("mail.smtp.host", "smtp.gmail.com")
                 put("mail.smtp.port", "587")
                 put("mail.smtp.connectiontimeout", "12000")
@@ -380,6 +410,7 @@ object MailSender {
             message.setContent(multipart)
             Transport.send(message)
 
+            // Delete photo and .loc file only after confirmed successful send
             try {
                 photoFile?.let {
                     File(it.parentFile, it.nameWithoutExtension + ".loc").delete()
@@ -391,16 +422,12 @@ object MailSender {
             onResult?.invoke(true, "Email + Location sent successfully to $receiverEmail!")
             true
         } catch (authEx: AuthenticationFailedException) {
-            try {
-                photoFile?.let {
-                    File(it.parentFile, it.nameWithoutExtension + ".loc").delete()
-                    it.delete()
-                }
-            } catch (_: Exception) {}
-            onResult?.invoke(false, "Gmail login failed: Check your 16-digit App Password.")
+            // Bug 3 fix: Keep photoFile in cache (capped at 5) so evidence is not lost if password had a typo
+            Log.e(TAG, "Gmail authentication failed - keeping photo in pending queue", authEx)
+            onResult?.invoke(false, "Gmail login failed: Check your 16-digit App Password (photo saved in queue).")
             false
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send email (will retry when internet is available)", e)
+            Log.e(TAG, "Failed to send email (will retry)", e)
             tryAutoEnableAndConnectWifi(context)
             onResult?.invoke(false, "Email error: ${e.localizedMessage ?: e.javaClass.simpleName}")
             false

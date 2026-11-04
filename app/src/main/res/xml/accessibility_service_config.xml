@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged"
+    android:packageNames="android,com.android.systemui,com.coloros.oshare,com.oplus.exsystemservice,com.coloros.systemui"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagRequestFilterKeyEvents|flagReportViewIds"
     android:canPerformGestures="false"

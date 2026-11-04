@@ -1,6 +1,7 @@
 package com.security.lockguard
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
@@ -15,13 +16,12 @@ import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Arrays
+import java.util.concurrent.atomic.AtomicBoolean
 
 object CameraCaptureHelper {
     private const val TAG = "CameraCaptureHelper"
     private const val MAX_PENDING_PHOTOS = 5
-
-    @Volatile
-    private var isCapturing = false
+    private val isCapturing = AtomicBoolean(false)
 
     fun getPendingAlertsDir(context: Context): File {
         val storageCtx = context.applicationContext.createDeviceProtectedStorageContext()
@@ -32,7 +32,7 @@ object CameraCaptureHelper {
 
     /**
      * Ensures cache never holds more than MAX_PENDING_PHOTOS (5 photos ~ 200KB total).
-     * Deletes oldest files if limit is exceeded.
+     * Deletes oldest files (and their .loc metadata) if limit is exceeded.
      */
     fun enforceCacheLimit(context: Context) {
         try {
@@ -42,7 +42,9 @@ object CameraCaptureHelper {
                 val sorted = files.sortedBy { it.lastModified() }
                 val toDelete = sorted.size - MAX_PENDING_PHOTOS + 1
                 for (i in 0 until toDelete) {
-                    sorted[i].delete()
+                    val oldFile = sorted[i]
+                    try { File(oldFile.parentFile, oldFile.nameWithoutExtension + ".loc").delete() } catch (_: Exception) {}
+                    try { oldFile.delete() } catch (_: Exception) {}
                 }
             }
         } catch (e: Exception) {
@@ -50,6 +52,7 @@ object CameraCaptureHelper {
         }
     }
 
+    @SuppressLint("MissingPermission")
     fun captureFrontPhoto(context: Context, onComplete: (File?) -> Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
@@ -59,17 +62,33 @@ object CameraCaptureHelper {
             return
         }
 
-        if (isCapturing) {
+        // Bug 1 fix: Always invoke onComplete(null) if capture is already running so UI never hangs
+        if (!isCapturing.compareAndSet(false, true)) {
             Log.d(TAG, "Capture already in progress")
+            onComplete(null)
             return
         }
-        isCapturing = true
 
         val handlerThread = HandlerThread("LockGuardCameraThread").apply { start() }
         val backgroundHandler = Handler(handlerThread.looper)
 
+        var imageReader: ImageReader? = null
+        var dummySurfaceTexture: SurfaceTexture? = null
+        var previewSurface: Surface? = null
+        var cameraDeviceRef: CameraDevice? = null
+        val hasFinished = AtomicBoolean(false)
+
+        fun closeResources() {
+            try { cameraDeviceRef?.close() } catch (_: Exception) {}
+            try { imageReader?.close() } catch (_: Exception) {}
+            try { previewSurface?.release() } catch (_: Exception) {}
+            try { dummySurfaceTexture?.release() } catch (_: Exception) {}
+        }
+
         fun cleanupAndFinish(file: File?) {
-            isCapturing = false
+            if (!hasFinished.compareAndSet(false, true)) return
+            closeResources()
+            isCapturing.set(false)
             try {
                 handlerThread.quitSafely()
             } catch (_: Exception) {}
@@ -100,26 +119,18 @@ object CameraCaptureHelper {
                 return
             }
 
-            val imageReader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 2)
-            val dummySurfaceTexture = SurfaceTexture(10)
-            dummySurfaceTexture.setDefaultBufferSize(640, 480)
-            val previewSurface = Surface(dummySurfaceTexture)
+            // Compute upright portrait JPEG orientation for front camera
+            val jpegOrientation = (sensorOrientation + 360) % 360
 
-            var cameraDeviceRef: CameraDevice? = null
-            var hasSaved = false
-
-            fun closeResources() {
-                try { cameraDeviceRef?.close() } catch (_: Exception) {}
-                try { imageReader.close() } catch (_: Exception) {}
-                try { previewSurface.release() } catch (_: Exception) {}
-                try { dummySurfaceTexture.release() } catch (_: Exception) {}
+            imageReader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 2)
+            dummySurfaceTexture = SurfaceTexture(10).apply {
+                setDefaultBufferSize(640, 480)
             }
+            previewSurface = Surface(dummySurfaceTexture)
 
             imageReader.setOnImageAvailableListener({ reader ->
-                if (hasSaved) return@setOnImageAvailableListener
                 val image = try { reader.acquireLatestImage() } catch (_: Exception) { null }
                 if (image != null) {
-                    hasSaved = true
                     var outputFile: File? = null
                     try {
                         val buffer = image.planes[0].buffer
@@ -134,7 +145,6 @@ object CameraCaptureHelper {
                         Log.e(TAG, "Failed saving JPEG", e)
                     } finally {
                         image.close()
-                        closeResources()
                         cleanupAndFinish(outputFile)
                     }
                 }
@@ -144,12 +154,13 @@ object CameraCaptureHelper {
                 override fun onOpened(camera: CameraDevice) {
                     cameraDeviceRef = camera
                     try {
-                        val surfaces = Arrays.asList(previewSurface, imageReader.surface)
+                        val surfaces = Arrays.asList(previewSurface!!, imageReader!!.surface)
                         camera.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(session: CameraCaptureSession) {
                                 try {
+                                    // Warm up auto-exposure for 750ms so photo is bright even in indoor/low light
                                     val previewReq = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
-                                        addTarget(previewSurface)
+                                        addTarget(previewSurface!!)
                                         set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
                                         set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
                                     }
@@ -158,56 +169,47 @@ object CameraCaptureHelper {
                                     backgroundHandler.postDelayed({
                                         try {
                                             val captureReq = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-                                                addTarget(imageReader.surface)
+                                                addTarget(imageReader!!.surface)
                                                 set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                                                set(CaptureRequest.JPEG_ORIENTATION, sensorOrientation)
+                                                set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation)
                                             }
                                             session.stopRepeating()
                                             session.capture(captureReq.build(), null, backgroundHandler)
                                         } catch (e: Exception) {
                                             Log.e(TAG, "Still capture failed", e)
-                                            closeResources()
                                             cleanupAndFinish(null)
                                         }
-                                    }, 450L)
+                                    }, 750L)
                                 } catch (e: Exception) {
                                     Log.e(TAG, "Preview request failed", e)
-                                    closeResources()
                                     cleanupAndFinish(null)
                                 }
                             }
 
                             override fun onConfigureFailed(session: CameraCaptureSession) {
-                                closeResources()
                                 cleanupAndFinish(null)
                             }
                         }, backgroundHandler)
                     } catch (e: Exception) {
-                        closeResources()
                         cleanupAndFinish(null)
                     }
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
                     cameraDeviceRef = camera
-                    closeResources()
-                    if (!hasSaved) cleanupAndFinish(null)
+                    cleanupAndFinish(null)
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
                     cameraDeviceRef = camera
-                    closeResources()
-                    if (!hasSaved) cleanupAndFinish(null)
+                    cleanupAndFinish(null)
                 }
             }, backgroundHandler)
 
+            // Safety timeout (6.5 seconds)
             backgroundHandler.postDelayed({
-                if (!hasSaved && isCapturing) {
-                    Log.w(TAG, "Camera capture timed out")
-                    closeResources()
-                    cleanupAndFinish(null)
-                }
-            }, 6000L)
+                cleanupAndFinish(null)
+            }, 6500L)
 
         } catch (e: SecurityException) {
             cleanupAndFinish(null)
