@@ -1,81 +1,68 @@
 # 🛡️ LockGuard — Anti-Theft Lockscreen Protector
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/sanju-suthar/LockGuard?style=flat-square)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/sanju-suthar/LockGuard?style=flat-square&cacheSeconds=60)
 ![Platform](https://img.shields.io/badge/Platform-Android-brightgreen?style=flat-square)
 ![Build](https://img.shields.io/badge/Build-GitHub%20Actions-blue?style=flat-square)
-![License](https://img.shields.io/github/license/sanju-suthar/LockGuard?style=flat-square)
+![License](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)
 ![Issues](https://img.shields.io/github/issues/sanju-suthar/LockGuard?style=flat-square)
 
-**LockGuard** is an advanced Android anti-theft utility designed to stop thieves from powering off or restarting your device while it is locked. The moment someone tries to open the Power Menu on the lock screen, LockGuard blocks it within milliseconds, silently captures a front-camera photo, grabs the exact GPS location, auto-connects to Wi-Fi if offline, and emails the complete report to you.
+**LockGuard** is an Android anti-theft utility designed to prevent unauthorized users from powering off or restarting your device while it is locked. When the system Power Menu is triggered on the lock screen, LockGuard dismisses the dialog, captures a silent front-camera photo, retrieves GPS coordinates with a Google Maps link, auto-enables Wi-Fi if offline, and sends an encrypted email alert.
 
 ---
 
 ## 📥 Download Latest APK
 
-Grab the ready-to-install APK built directly via GitHub Actions:
+Download the latest signed release APK from the GitHub Releases page or build artifacts:
 
-👉 **[Download Latest APK Here](https://github.com/sanju-suthar/LockGuard/releases/latest)**
+👉 **[Download Latest Release APK](https://github.com/sanju-suthar/LockGuard/releases/latest)**
 
-> **⚠️ Play Protect & Installation Note:** Because LockGuard uses `AccessibilityService` to block the lockscreen power menu and `targetSdk 28` to allow silent background Wi-Fi toggling, Android Play Protect may show a prompt during installation. Tap **"More details" -> "Install anyway"** to proceed.
+> **⚠️ Play Protect & Installation Note:** Because LockGuard uses `AccessibilityService` to detect the lockscreen power menu and `targetSdk 28` to allow background Wi-Fi toggling on Android 10/11, Google Play Protect may display a warning during sideloading. Temporarily pause Play Protect in Play Store settings or tap **"More details" -> "Install anyway"** to proceed.
 
 ---
 
 ## 🚀 Key Features & Technical Architecture
 
-* **🚫 Smart Power Menu Blocker (Zero False Triggers):** 
-  Uses `AccessibilityService` (`TYPE_WINDOW_STATE_CHANGED` & `onKeyEvent`) to strictly detect genuine Android System Shutdown/GlobalActions dialogs (`GlobalActions`, `OplusGlobalActions`, `ColorGlobalActions`). Completely ignores lockscreen SMS/WhatsApp notifications (`notification_stack_scroller`) to guarantee zero false alarms.
-* **📸 Silent Intruder Selfie (`CameraX` + `TYPE_ACCESSIBILITY_OVERLAY`):** 
-  Uses a 1x1 pixel invisible overlay on the lock screen to capture a front-camera photo of the intruder without any camera preview or shutter sound.
-* **📍 Live GPS Location + Dual Offline Location Tracking (`.loc` Backup):** 
-  Attaches exact GPS Coordinates, Accuracy (in meters), and a clickable **Google Maps Link** (`https://maps.google.com/?q=lat,lng`) to the alert email. If offline during the attempt, it caches the exact `.loc` coordinates and later sends **both** the **Attempt-Time Location** and **Current Live Location** once reconnected!
-* **📶 Auto Wi-Fi Enable & Open Wi-Fi Connect:** 
-  If mobile data and Wi-Fi are turned OFF, LockGuard automatically switches Wi-Fi ON in the background (`targetSdk 28`) and connects to known networks or the strongest nearby **Open (Password-free) Wi-Fi** to transmit the intruder alert.
-* **📧 Offline Photo Queue & Auto-Sync (`JavaMail SMTP` + `NetworkCallback`):** 
-  Queues up to the latest 5 intruder photos (`~200 KB` max via `enforceCacheLimit()`) when offline and automatically emails & clears the cache the moment internet connectivity is restored.
-* **👻 Stealth 24/7 Background Operation (`BOOT_COMPLETED` / Direct Boot):** 
-  Runs silently with zero persistent notifications and auto-starts on reboot even before the device is unlocked.
+* **🚫 Smart Power Menu Blocker:** Uses `AccessibilityService` (`TYPE_WINDOW_STATE_CHANGED` & `onKeyEvent`) restricted to system packages (`android`, `com.android.systemui`, ColorOS/Realme UI global actions) to detect genuine Shutdown/Restart dialogs while ignoring lockscreen notification panels (`notification_stack_scroller`).
+* **📸 Silent Intruder Selfie (Camera2 API):** Uses Android's native `Camera2` API with a 1×1 pixel invisible `TYPE_ACCESSIBILITY_OVERLAY` window and a `750ms` auto-exposure warm-up to capture a front-camera photo without displaying a preview or shutter sound.
+* **📍 Live GPS Location + Offline `.loc` Backup:** Attaches GPS/Network coordinates, accuracy in meters, the exact timestamp/age of the location fix (*Live Fix vs. Last Known Fix*), and a clickable Google Maps link (`https://maps.google.com/?q=lat,lng`). If offline during the attempt, it saves a companion `.loc` file and emails both the **Attempt-Time Location** and **Current Live Location** once reconnected.
+* **📶 Auto Wi-Fi Enable & Reconnect:** If both Mobile Data and Wi-Fi are turned off when a lockscreen power-off attempt occurs, LockGuard automatically enables Wi-Fi in the background and connects to saved networks or available open Wi-Fi networks so the alert can be delivered.
+* **🔐 Hardware-Backed Security (AES-GCM & Strict TLS):**
+  * **Android Keystore Encryption:** Your 16-digit Gmail App Password is encrypted locally using a `256-bit AES/GCM/NoPadding` key stored in the Android Keystore inside `DeviceProtectedStorage`.
+  * **Strict SMTP TLS 1.2/1.3:** Enforces `mail.smtp.starttls.required=true` and `mail.smtp.ssl.checkserveridentity=true` over `smtp.gmail.com:587` to protect credentials and attachments against downgrade or man-in-the-middle (MITM) attacks on untrusted networks.
+* **📦 Offline Queue & Cache Cap (Max 5 Photos):** Queues up to 5 recent intruder photos (`~200 KB` max) when offline and automatically sends and deletes them via `ConnectivityManager.NetworkCallback` (with automatic delayed retry) once internet access returns.
+* **⚡ 24/7 Background Operation & Direct Boot:** Runs silently as a bound system Accessibility Service without persistent status bar notifications and registers for `LOCKED_BOOT_COMPLETED` so protection resumes immediately after a reboot before the device is unlocked.
 
 ---
 
-## ⚙️ Complete Setup Guide
+## 🛠️ Complete Setup Guide
 
-### Step 1: Generate a Gmail App Password (For Email Alerts)
-*(Note: Google does not allow regular Gmail passwords for background SMTP emails. You must generate a 16-character App Password).*
+### Step 1: Generate a 16-Digit Gmail App Password
+1. Enable [2-Step Verification](https://myaccount.google.com/security) on your Google Account.
+2. Visit [Google App Passwords](https://myaccount.google.com/apppasswords).
+3. Enter `LockGuard` as the app name and tap **Create**.
+4. Copy the **16-character App Password** and enter it inside the LockGuard app along with your Sender and Receiver Gmail addresses, then tap **Save Settings**.
 
-1. Open your [Google Account Security Settings](https://myaccount.google.com/security) and ensure **2-Step Verification** is **ON**.
-2. Go to the **[Google App Passwords Page](https://myaccount.google.com/apppasswords)**.
-3. Enter an app name (e.g., `LockGuard`) and tap **Create**.
-4. Copy the **16-letter password** (without spaces) and paste it into the LockGuard app's SMTP Password field.
-
-### Step 2: Grant Required Android Permissions
-1. **Camera, Location & Wi-Fi:** 
-   * Open LockGuard, allow **Camera** access, and tap **"Grant Exact Location & Wi-Fi Permission"**.
-   * Set Location permission to **"Allow all the time"** so LockGuard can fetch GPS coordinates and scan for open Wi-Fi networks while the screen is locked.
-   * Enable the switches for **"Send Exact GPS Location in Email"** and **"Auto-Enable Wi-Fi & Connect if Offline"**.
-2. **Accessibility Service:** 
-   * Go to `Settings -> Accessibility -> Downloaded Apps -> LockGuard` and turn it **ON**.
-   * *Android 13+ Users:* If restricted, open `Settings -> Apps -> LockGuard`, tap the **Three Dots (⋮)** at the top right, and select **"Allow restricted settings"**.
-3. **OEM Background Optimization (Crucial for Realme UI / MIUI / ColorOS):** 
-   * Go to `App Info -> Battery Usage` and enable **"Allow background activity"** & **"Allow auto-launch"**.
+### Step 2: Grant Required Permissions
+1. **Front Camera Permission:** Tap **"Grant Front Camera Permission"** and select **Allow**.
+2. **Exact Location & Wi-Fi Permission:** Tap **"Grant Exact Location & Wi-Fi Permission"** and select **"Allow all the time"** in App Info so GPS lookup and Wi-Fi scanning work while the screen is locked.
+3. **24/7 Background Run:** Tap **"Allow 24/7 Background Run"** to exempt LockGuard from battery optimizations.
+   * *Realme UI / ColorOS / OPPO Tip:* Open `App Info -> Battery Usage` and enable **Allow background activity** and **Allow auto-launch**.
+4. **Accessibility Service:** Tap **"Enable LockGuard Accessibility Service"**, navigate to `Downloaded Services (Installed Apps) -> LockGuard Power Blocker`, and turn it **ON**.
+5. Tap **"Test Camera, GPS Location & Send Email"** to verify your configuration.
 
 ---
 
-## ⚠️ Known Hardware Limitation
+## ⚠️ Known Limitations
 
-* **On-Screen Power Menu vs. Hardware Force Reboot:** LockGuard blocks the on-screen software Power Menu 100% of the time and captures the intruder's photo and GPS location. However, if someone holds `Power + Volume Up` for 10–12 seconds, the motherboard triggers a hardware-level reset which no Android software can intercept. To counter this, LockGuard supports **Direct Boot**, ensuring protection restarts immediately as soon as the phone boots back to the lock screen.
-
----
-
-## 🐛 Testing, Bug Reports & Contributions
-
-* **Found a Bug or Device Issue?** Open an issue in the **[Issues Tab](https://github.com/sanju-suthar/LockGuard/issues)** with your **Phone Model** and **Android Version**.
-* **Want to Contribute?** Feel free to fork the repository and submit a **Pull Request (PR)**.
+* **Hardware Force Reboot:** Software can dismiss the on-screen Power Off / Restart menu, but holding `Power + Volume Up` for 10–12 seconds triggers a hardware-level reset built into the device motherboard that no Android software can block. LockGuard mitigates this using Direct Boot (`directBootAware="true"`) to restart protection as soon as the phone boots back to the lock screen.
+* **OEM Variations:** Power menu detection relies on system window classes and view structures, which can vary across custom Android skins (Realme UI, ColorOS, MIUI, OneUI). Test on your specific device after installation.
 
 ---
 
-## 👤 Author
+## 👨‍💻 Developer
 
 **Developed by Sanjay Suthar**
-* GitHub: [@sanju-suthar](https://github.com/sanju-suthar)
+* **GitHub Profile:** [@sanju-suthar](https://github.com/sanju-suthar)
+* **Project Repository:** [https://github.com/sanju-suthar/LockGuard](https://github.com/sanju-suthar/LockGuard)
 
-⭐ *If you find this anti-theft tool helpful, please give this repository a **Star**!*
+⭐ *If you find LockGuard useful, please consider giving this repository a **Star**!*
