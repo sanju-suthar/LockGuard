@@ -58,10 +58,6 @@ object MailSender {
         }
     }
 
-    /**
-     * Automatically turns ON Wi-Fi when offline and connects to any saved Wi-Fi
-     * or the strongest nearby Open Wi-Fi network.
-     */
     @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
     fun tryAutoEnableAndConnectWifi(context: Context) {
@@ -126,9 +122,6 @@ object MailSender {
         }
     }
 
-    /**
-     * Thread-safe GPS/Network location fetcher with exact fix timestamp & age reporting.
-     */
     @SuppressLint("MissingPermission")
     fun getDeviceLocationString(context: Context): String {
         if (!PrefsManager.isLocationShareEnabled(context)) {
@@ -178,7 +171,7 @@ object MailSender {
             }
 
             var bestLocation = freshLocationRef.get()
-            var isLiveFix = bestLocation != null
+            val isLiveFix = bestLocation != null
 
             if (bestLocation == null) {
                 val providers = lm.getProviders(true)
@@ -317,7 +310,7 @@ object MailSender {
                     senderEmail = senderEmail,
                     appPassword = appPassword,
                     receiverEmail = receiverEmail,
-                    reason = "Queued Power-Off Attempt (Sent after internet connection confirmed)",
+                    reason = "Queued Security Alert (Sent after internet connection confirmed)",
                     photoFile = file,
                     locationInfo = combinedLoc,
                     captureTimeMs = file.lastModified(),
@@ -344,7 +337,6 @@ object MailSender {
         onResult: ((Boolean, String) -> Unit)?
     ): Boolean {
         return try {
-            // Strict TLS 1.2 / 1.3 + Server Identity Verification (Prevents STARTTLS stripping on Open Wi-Fi)
             val props = Properties().apply {
                 put("mail.smtp.auth", "true")
                 put("mail.smtp.starttls.enable", "true")
@@ -371,7 +363,11 @@ object MailSender {
             val message = MimeMessage(session).apply {
                 setFrom(InternetAddress(senderEmail, "LockGuard Security"))
                 setRecipients(Message.RecipientType.TO, InternetAddress.parse(receiverEmail))
-                subject = "ALERT: Power-Off Attempt & Location on ${Build.MODEL}"
+                subject = if (reason.contains("Incorrect", ignoreCase = true) || reason.contains("Password", ignoreCase = true)) {
+                    "ALERT: Wrong Password/PIN/Pattern on ${Build.MODEL}"
+                } else {
+                    "ALERT: Power-Off Attempt & Location on ${Build.MODEL}"
+                }
             }
 
             val textPart = MimeBodyPart().apply {
@@ -410,7 +406,6 @@ object MailSender {
             message.setContent(multipart)
             Transport.send(message)
 
-            // Delete photo and .loc file only after confirmed successful send
             try {
                 photoFile?.let {
                     File(it.parentFile, it.nameWithoutExtension + ".loc").delete()
@@ -422,7 +417,6 @@ object MailSender {
             onResult?.invoke(true, "Email + Location sent successfully to $receiverEmail!")
             true
         } catch (authEx: AuthenticationFailedException) {
-            // Bug 3 fix: Keep photoFile in cache (capped at 5) so evidence is not lost if password had a typo
             Log.e(TAG, "Gmail authentication failed - keeping photo in pending queue", authEx)
             onResult?.invoke(false, "Gmail login failed: Check your 16-digit App Password (photo saved in queue).")
             false

@@ -3,4 +3,5 @@
     <string name="app_name">LockGuard</string>
     <string name="service_name">LockGuard Power Blocker</string>
     <string name="accessibility_service_description">Blocks the Power Off / Restart menu when your Realme device is locked and captures an intruder photo if someone tries to switch off your phone.</string>
+    <string name="device_admin_description">Detects wrong PIN, Pattern, or Password attempts on the Lock Screen (ignores Fingerprint &amp; Face Unlock) to capture an intruder photo and send an email alert.</string>
 </resources>

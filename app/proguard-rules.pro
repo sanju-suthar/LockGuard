@@ -4,7 +4,4 @@
 -keep class myjava.awt.datatransfer.** { *; }
 -keep class org.apache.harmony.** { *; }
 -keep class com.security.lockguard.** { *; }
--dontwarn java.awt.**
--dontwarn javax.imageio.**
--dontwarn java.beans.**
--dontwarn javax.security.**
+-dontwarn **

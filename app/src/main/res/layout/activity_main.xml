@@ -45,7 +45,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Realme 6 Lockscreen Power Blocker &amp; Intruder Alert"
+                    android:text="Realme 6 Anti-Theft Power &amp; Password Guard"
                     android:textColor="#94A3B8"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -84,7 +84,17 @@
                 android:id="@+id/switchPhotoAlert"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Capture Front Photo &amp; Send Email"
+                android:text="Photo &amp; Email on Power-Off Attempt"
+                android:textColor="#E2E8F0"
+                android:textSize="15sp"
+                android:checked="true"
+                android:paddingVertical="6dp" />
+
+            <Switch
+                android:id="@+id/switchWrongPassAlert"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Photo &amp; Email on Wrong PIN/Pattern (2+ Try)"
                 android:textColor="#E2E8F0"
                 android:textSize="15sp"
                 android:checked="true"
@@ -148,6 +158,15 @@
                 android:layout_marginBottom="8dp" />
 
             <Button
+                android:id="@+id/btnDeviceAdmin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Enable Wrong PIN/Pattern Detector (Admin)"
+                android:backgroundTint="#334155"
+                android:textColor="#F8FAFC"
+                android:layout_marginBottom="8dp" />
+
+            <Button
                 android:id="@+id/btnBatteryOpt"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -194,7 +213,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Your email &amp; password are saved ONLY inside your phone (never in GitHub code). Use a 16-digit Gmail App Password."
+                android:text="Your email &amp; password are encrypted via Android Keystore inside your phone (never in GitHub code). Use a 16-digit Gmail App Password."
                 android:textColor="#94A3B8"
                 android:textSize="12sp"
                 android:layout_marginBottom="12dp" />

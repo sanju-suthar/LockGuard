@@ -1,6 +1,7 @@
 package com.security.lockguard
 
 import android.Manifest
+import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -26,10 +27,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvServiceStatus: TextView
     private lateinit var switchPowerBlock: Switch
     private lateinit var switchPhotoAlert: Switch
+    private lateinit var switchWrongPassAlert: Switch
     private lateinit var switchLocationShare: Switch
     private lateinit var switchAutoWifi: Switch
     private lateinit var btnCameraPerm: Button
     private lateinit var btnLocationPerm: Button
+    private lateinit var btnDeviceAdmin: Button
     private lateinit var btnBatteryOpt: Button
     private lateinit var btnAccessibility: Button
     private lateinit var etSenderEmail: EditText
@@ -46,10 +49,12 @@ class MainActivity : AppCompatActivity() {
         tvServiceStatus = findViewById(R.id.tvServiceStatus)
         switchPowerBlock = findViewById(R.id.switchPowerBlock)
         switchPhotoAlert = findViewById(R.id.switchPhotoAlert)
+        switchWrongPassAlert = findViewById(R.id.switchWrongPassAlert)
         switchLocationShare = findViewById(R.id.switchLocationShare)
         switchAutoWifi = findViewById(R.id.switchAutoWifi)
         btnCameraPerm = findViewById(R.id.btnCameraPerm)
         btnLocationPerm = findViewById(R.id.btnLocationPerm)
+        btnDeviceAdmin = findViewById(R.id.btnDeviceAdmin)
         btnBatteryOpt = findViewById(R.id.btnBatteryOpt)
         btnAccessibility = findViewById(R.id.btnAccessibility)
         etSenderEmail = findViewById(R.id.etSenderEmail)
@@ -62,6 +67,7 @@ class MainActivity : AppCompatActivity() {
         // Load saved preferences
         switchPowerBlock.isChecked = PrefsManager.isPowerBlockEnabled(this)
         switchPhotoAlert.isChecked = PrefsManager.isPhotoAlertEnabled(this)
+        switchWrongPassAlert.isChecked = PrefsManager.isWrongPasswordAlertEnabled(this)
         switchLocationShare.isChecked = PrefsManager.isLocationShareEnabled(this)
         switchAutoWifi.isChecked = PrefsManager.isAutoWifiEnabled(this)
         etSenderEmail.setText(PrefsManager.getSenderEmail(this))
@@ -74,6 +80,10 @@ class MainActivity : AppCompatActivity() {
 
         switchPhotoAlert.setOnCheckedChangeListener { _, isChecked ->
             PrefsManager.setPhotoAlertEnabled(this, isChecked)
+        }
+
+        switchWrongPassAlert.setOnCheckedChangeListener { _, isChecked ->
+            PrefsManager.setWrongPasswordAlertEnabled(this, isChecked)
         }
 
         switchLocationShare.setOnCheckedChangeListener { _, isChecked ->
@@ -103,6 +113,23 @@ class MainActivity : AppCompatActivity() {
                 perms.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
             }
             ActivityCompat.requestPermissions(this, perms.toTypedArray(), 102)
+        }
+
+        btnDeviceAdmin.setOnClickListener {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            val adminComponent = ComponentName(this, LockGuardAdminReceiver::class.java)
+            if (!dpm.isAdminActive(adminComponent)) {
+                val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+                    putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
+                    putExtra(
+                        DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                        "Enable Device Admin so LockGuard can detect wrong PIN, Pattern, or Password attempts on the Lock Screen (ignores Fingerprint & Face Unlock)."
+                    )
+                }
+                startActivity(intent)
+            } else {
+                Toast.makeText(this, "Wrong PIN/Pattern Detector is already active!", Toast.LENGTH_SHORT).show()
+            }
         }
 
         btnBatteryOpt.setOnClickListener {
@@ -187,6 +214,15 @@ class MainActivity : AppCompatActivity() {
             "Grant Exact Location & Wi-Fi Permission"
         }
 
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(this, LockGuardAdminReceiver::class.java)
+        val isAdmin = dpm.isAdminActive(adminComponent)
+        btnDeviceAdmin.text = if (isAdmin) {
+            "Wrong PIN/Pattern Detector (Admin): ON ✓"
+        } else {
+            "Enable Wrong PIN/Pattern Detector (Admin)"
+        }
+
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         val ignoringBattery = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             pm.isIgnoringBatteryOptimizations(packageName)
@@ -198,9 +234,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         val accEnabled = isAccessibilityServiceEnabled(this, LockGuardService::class.java)
-        if (accEnabled) {
-            tvServiceStatus.text = "Status: ACTIVE & PROTECTING LOCKSCREEN ✓"
+        if (accEnabled && isAdmin) {
+            tvServiceStatus.text = "Status: POWER & PASSWORD GUARD ACTIVE ✓"
             tvServiceStatus.setTextColor(Color.parseColor("#34D399"))
+            btnAccessibility.text = "LockGuard Accessibility Service: ON ✓"
+        } else if (accEnabled) {
+            tvServiceStatus.text = "Status: POWER GUARD ACTIVE (Enable Admin for PIN)"
+            tvServiceStatus.setTextColor(Color.parseColor("#FCD34D"))
             btnAccessibility.text = "LockGuard Accessibility Service: ON ✓"
         } else {
             tvServiceStatus.text = "Status: INACTIVE (Turn on Accessibility Service)"

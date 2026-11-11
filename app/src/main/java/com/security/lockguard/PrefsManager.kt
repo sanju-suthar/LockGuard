@@ -22,11 +22,15 @@ object PrefsManager {
 
     private const val KEY_POWER_BLOCK_ENABLED = "power_block_enabled"
     private const val KEY_PHOTO_ALERT_ENABLED = "photo_alert_enabled"
+    private const val KEY_WRONG_PASS_ALERT_ENABLED = "wrong_pass_alert_enabled"
     private const val KEY_LOCATION_SHARE_ENABLED = "location_share_enabled"
     private const val KEY_AUTO_WIFI_ENABLED = "auto_wifi_enabled"
     private const val KEY_SENDER_EMAIL = "sender_email"
     private const val KEY_APP_PASSWORD_ENC = "app_password_enc"
     private const val KEY_RECEIVER_EMAIL = "receiver_email"
+
+    private const val KEY_FAILED_PASS_COUNT = "failed_pass_count"
+    private const val KEY_LAST_FAILED_PASS_TIME = "last_failed_pass_time"
 
     private fun getPrefs(context: Context): SharedPreferences {
         val storageContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -107,6 +111,13 @@ object PrefsManager {
         getPrefs(context).edit().putBoolean(KEY_PHOTO_ALERT_ENABLED, enabled).apply()
     }
 
+    fun isWrongPasswordAlertEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_WRONG_PASS_ALERT_ENABLED, true)
+
+    fun setWrongPasswordAlertEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_WRONG_PASS_ALERT_ENABLED, enabled).apply()
+    }
+
     fun isLocationShareEnabled(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_LOCATION_SHARE_ENABLED, true)
 
@@ -114,12 +125,31 @@ object PrefsManager {
         getPrefs(context).edit().putBoolean(KEY_LOCATION_SHARE_ENABLED, enabled).apply()
     }
 
-    // Default ON as requested so Wi-Fi auto-enables and auto-connects when offline
     fun isAutoWifiEnabled(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_AUTO_WIFI_ENABLED, true)
 
     fun setAutoWifiEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_AUTO_WIFI_ENABLED, enabled).apply()
+    }
+
+    fun incrementFailedPasswordCount(context: Context, timestampMs: Long): Int {
+        val prefs = getPrefs(context)
+        val nextCount = prefs.getInt(KEY_FAILED_PASS_COUNT, 0) + 1
+        prefs.edit()
+            .putInt(KEY_FAILED_PASS_COUNT, nextCount)
+            .putLong(KEY_LAST_FAILED_PASS_TIME, timestampMs)
+            .apply()
+        return nextCount
+    }
+
+    fun getLastFailedPasswordTime(context: Context): Long =
+        getPrefs(context).getLong(KEY_LAST_FAILED_PASS_TIME, 0L)
+
+    fun resetFailedPasswordCount(context: Context) {
+        getPrefs(context).edit()
+            .putInt(KEY_FAILED_PASS_COUNT, 0)
+            .putLong(KEY_LAST_FAILED_PASS_TIME, 0L)
+            .apply()
     }
 
     fun getSenderEmail(context: Context): String =
@@ -131,7 +161,6 @@ object PrefsManager {
         if (enc.isNotEmpty()) {
             return decryptSecret(enc).replace(" ", "").trim()
         }
-        // Migrate legacy plain-text password if present from older version
         val legacyPlain = prefs.getString("app_password", "")?.replace(" ", "")?.trim() ?: ""
         if (legacyPlain.isNotEmpty()) {
             prefs.edit()

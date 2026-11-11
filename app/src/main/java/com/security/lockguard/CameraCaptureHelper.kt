@@ -30,10 +30,6 @@ object CameraCaptureHelper {
         return dir
     }
 
-    /**
-     * Ensures cache never holds more than MAX_PENDING_PHOTOS (5 photos ~ 200KB total).
-     * Deletes oldest files (and their .loc metadata) if limit is exceeded.
-     */
     fun enforceCacheLimit(context: Context) {
         try {
             val dir = getPendingAlertsDir(context)
@@ -62,7 +58,6 @@ object CameraCaptureHelper {
             return
         }
 
-        // Bug 1 fix: Always invoke onComplete(null) if capture is already running so UI never hangs
         if (!isCapturing.compareAndSet(false, true)) {
             Log.d(TAG, "Capture already in progress")
             onComplete(null)
@@ -119,7 +114,6 @@ object CameraCaptureHelper {
                 return
             }
 
-            // Compute upright portrait JPEG orientation for front camera
             val jpegOrientation = (sensorOrientation + 360) % 360
 
             imageReader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 2)
@@ -158,7 +152,6 @@ object CameraCaptureHelper {
                         camera.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(session: CameraCaptureSession) {
                                 try {
-                                    // Warm up auto-exposure for 750ms so photo is bright even in indoor/low light
                                     val previewReq = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                                         addTarget(previewSurface!!)
                                         set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
@@ -206,7 +199,6 @@ object CameraCaptureHelper {
                 }
             }, backgroundHandler)
 
-            // Safety timeout (6.5 seconds)
             backgroundHandler.postDelayed({
                 cleanupAndFinish(null)
             }, 6500L)

@@ -44,9 +44,6 @@ class LockGuardService : AccessibilityService() {
         Log.i(TAG, "LockGuard AccessibilityService connected and active 24/7")
     }
 
-    /**
-     * Automatically sends queued intruder photos and clears cache as soon as Internet turns back ON.
-     */
     private fun registerNetworkReconnectListener() {
         try {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -90,9 +87,6 @@ class LockGuardService : AccessibilityService() {
         }
     }
 
-    /**
-     * Hardware key filter: if the OS forwards KEYCODE_POWER while locked, block and trigger immediately.
-     */
     override fun onKeyEvent(event: KeyEvent?): Boolean {
         if (event == null) return false
         if (!PrefsManager.isPowerBlockEnabled(this)) return false
@@ -109,10 +103,6 @@ class LockGuardService : AccessibilityService() {
         return false
     }
 
-    /**
-     * Called ONLY on TYPE_WINDOW_STATE_CHANGED (when a new system window/dialog opens).
-     * Does NOT trigger on SMS/WhatsApp notifications arriving on the lock screen.
-     */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
@@ -125,7 +115,6 @@ class LockGuardService : AccessibilityService() {
         val className = event.className?.toString()?.lowercase() ?: ""
         val pkgName = event.packageName?.toString()?.lowercase() ?: ""
 
-        // Ignore normal lockscreen / notification shade state changes
         if (className.contains("statusbar") ||
             className.contains("notification") ||
             className.contains("keyguard") ||
@@ -136,7 +125,6 @@ class LockGuardService : AccessibilityService() {
 
         var isPowerDialogWindow = false
 
-        // 1. Direct check on the newly opened Window's class name (AOSP & Realme UI / ColorOS GlobalActions)
         if (className.contains("globalactions") ||
             className.contains("powermenu") ||
             className.contains("shutdown") ||
@@ -148,8 +136,6 @@ class LockGuardService : AccessibilityService() {
             isPowerDialogWindow = true
         }
 
-        // 2. If SystemUI/Android opened a Dialog/FrameLayout for the Power Menu, verify via System View IDs
-        // while strictly excluding the LockScreen & Notification panel.
         if (!isPowerDialogWindow && (pkgName == "android" || pkgName.contains("systemui") || pkgName.contains("oplus") || pkgName.contains("coloros"))) {
             val root = rootInActiveWindow
             if (root != null && !isLockScreenOrNotificationWindow(root)) {
@@ -165,10 +151,6 @@ class LockGuardService : AccessibilityService() {
         }
     }
 
-    /**
-     * Returns true if this window is the normal Lock Screen or Notification Panel
-     * (so SMS/WhatsApp notifications on the lock screen are 100% ignored).
-     */
     private fun isLockScreenOrNotificationWindow(root: AccessibilityNodeInfo): Boolean {
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.add(root)
@@ -193,10 +175,6 @@ class LockGuardService : AccessibilityService() {
         return false
     }
 
-    /**
-     * Checks whether a non-lockscreen dialog window is the actual System Power Menu
-     * using system View IDs or structural Power + Restart controls.
-     */
     private fun isGenuinePowerMenuDialog(root: AccessibilityNodeInfo): Boolean {
         var hasPowerOffControl = false
         var hasRestartOrEmergencyControl = false
@@ -210,12 +188,10 @@ class LockGuardService : AccessibilityService() {
             visited++
 
             val viewId = node.viewIdResourceName?.lowercase() ?: ""
-            // Skip any notification subtree just in case
             if (viewId.contains("notification") || viewId.contains("keyguard")) {
                 continue
             }
 
-            // Check Realme UI / Android SystemUI GlobalActions view IDs
             if (viewId.contains("global_actions") ||
                 viewId.contains("shutdown") ||
                 viewId.contains("power_off") ||
@@ -225,7 +201,6 @@ class LockGuardService : AccessibilityService() {
                 return true
             }
 
-            // Structural check: separate controls in the dialog (not a long SMS message)
             val txt = (node.text?.toString() ?: node.contentDescription?.toString() ?: "").trim().lowercase()
             if (txt.isNotEmpty() && txt.length <= 30) {
                 if (txt == "power off" || txt == "slide to power off" || txt == "swipe down to power off" || txt == "पावर ऑफ" || txt == "स्विच ऑफ") {
@@ -265,7 +240,6 @@ class LockGuardService : AccessibilityService() {
             dismissSystemPowerDialog()
         }, 250L)
 
-        // Trigger front camera capture + email alert with 10-second cooldown
         val now = System.currentTimeMillis()
         if (PrefsManager.isPhotoAlertEnabled(this) && (now - lastAlertTime > ALERT_COOLDOWN_MS)) {
             lastAlertTime = now
